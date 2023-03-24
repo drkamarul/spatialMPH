@@ -1,0 +1,481 @@
+---
+title: "SpatialMPH"
+author: "Hazlienor"
+date: "2023-03-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r}
+#install recquired packages
+install.packages("sf")
+install.packages("tidyverse")
+install.packages("here") #working directory
+install.packages("janitor")
+install.packages("gtsummary")
+```
+
+```{r}
+# load package
+library(sf)
+library(tidyverse)
+library(here)
+library(janitor)
+library(gtsummary)
+
+```
+```{r}
+install.packages("DT")
+install.packages("stringr")
+install.packages("readxl")
+install.packages("broom")
+install.packages("tmap")
+install.packages("mapview")
+install.packages("lubridate")
+
+```
+```{r}
+library(DT)
+library(stringr)
+library(readxl)
+library(broom)
+library(tmap)
+library(mapview)
+library(lubridate)
+```
+```{r}
+remove.packages("rlang")
+install.packages("rlang")
+```
+```{r}
+library(broom)
+```
+
+```{r}
+remove.packages("vctrs")
+```
+
+```{r}
+install.packages("vctrs")
+```
+```{r}
+library(broom)
+library(tidyverse)
+```
+
+
+```
+```{r}
+install.packages("read_xl")
+library(readxl)
+```
+```{r}
+#load polygon data map kelantan
+st_geometry(kel)
+
+```{r}
+#load population data - kel_mukim is DOSM data for all mukim in Kel
+kel_mukim <- read_xlsx(here ("mukim.xlsx"))
+kel_mukim %>% datatable()
+
+```
+```{r}
+#merge population data - kel_map is merge population by mukim to kelantan map
+kel_map <- merge(kel,kel_mukim,by.x="MUKIM", by.y="MUKIM", all.x=T, sort=F)
+dim(kel_map)
+class(kel_map)
+st_crs(kel_map)
+```
+```{r}
+#EDA
+install.packages("gtsummary")
+library(gtsummary)
+tbl_summary(kel_map$LELAKI)
+kel_map
+class(kel_map)
+```
+```{r}
+#plot map
+st_geometry(kel_map)
+plot(kel_map[,2]) #negeri
+plot(kel_map[,3]) #daerah
+plot(kel_map[,1]) #mukim
+```
+
+```{r}
+library(tmap)
+kel_map %>% ggplot() + geom_sf(aes(fill = DAERAH)) +ggtitle('Population by district') + theme_bw()
+kel_map %>% ggplot() + geom_sf(aes(fill = MUKIM)) +ggtitle('Population by subdistrict') + theme_bw() + theme(legend.position = "none")
+tm_shape(kel_map) + tm_polygons("AVR_FEMALE") + tm_layout(legend.width = 0.50)
+tm_shape(kel_map) + tm_polygons("AVR")
+tm_shape(kel_map) +
+  tm_polygons(c("MUKIM", "DAERAH", "AVR_MALE")) +
+  tm_facets(ncol = 3)
+tm_shape(kel_map) +
+  tm_polygons(c("MUKIM", "DAERAH", "AVR_MALE")) +
+  tm_facets(nrow = 3)
+```
+
+```{r}
+#disease data all
+linelist <- read_xlsx(here ("linelist.xlsx")) %>% clean_names()
+glimpse(linelist)
+```
+```{r}
+#disease data all - list all is all leptospirosis and enteric fever cases
+listALL <- linelist %>% 
+  filter(!is.na(latitude_wgs),
+         !is.na(longitude_wgs))
+glimpse(listALL)
+```
+
+```{r}
+#convert all disease data to spatial data
+loc_ALL <- st_as_sf(listALL, 
+                    coords = c("longitude_wgs", "latitude_wgs"), 
+                    crs = 4326)
+loc_ALL %>% datatable()
+```
+```{r}
+#confirm CRS is wgs84
+st_crs(loc_ALL)
+```
+```{r}
+#plot map to see outlier
+ggplot() +
+  geom_sf(data = loc_ALL) +
+  ggtitle("Map of Leptospirosis and Enteric Fever") +
+  theme_bw()
+```
+
+```{r}
+#convert shapefile to RSO
+loc_ALL2 <- st_transform(loc_ALL, 3168)
+loc_ALL2 %>% datatable()
+```
+
+```{r}
+#select point only in Kelantan (all_kel)
+all_kel <- loc_ALL2 %>% 
+  mutate(within_kel_map = lengths(st_within(loc_ALL2, kel_map)))
+all_kel2 <- all_kel %>% 
+  filter(within_kel_map == 1)
+```
+
+```{r}
+#polygon and point data
+glimpse(all_kel2)
+glimpse (loc_ALL2)
+```
+```{r}
+#overall plot for enteric fever
+Enteric_kel <- all_kel2 %>% 
+  filter(diagnosis == "Enteric fever") 
+Enteric_plot <- ggplot() +
+  geom_sf(data = kel) +
+  geom_sf(data = Enteric_kel) +
+  ggtitle("Map of Enteric Fever Cases for 2016-2022") +
+  theme_bw()
+Enteric_plot
+```
+```{r}
+#overall plot for leptospirosis
+lepto_kel <- all_kel2 %>% 
+  filter(diagnosis == "Leptospirosis") 
+lepto_plot <- ggplot() +
+  geom_sf(data = kel) +
+  geom_sf(data = lepto_kel) +
+  ggtitle("Map of Leptospirosis Cases for 2016-2022") +
+  theme_bw()
+lepto_plot
+```
+
+```{r}
+#enteric fever plot by year
+Enteric_plot + 
+  facet_wrap(~tahun_daftar)
+```
+
+```{r}
+#lepto fever plot by year
+lepto_plot + 
+  facet_wrap(~tahun_daftar)
+```
+
+```{r}
+#Enteric fever cases by district
+Enteric_plot + 
+  facet_wrap(~DAERAH, ncol = 3)
+```
+```{r}
+#Lepto cases by district
+lepto_plot + 
+  facet_wrap(~DAERAH, ncol = 3)
+```
+```{r}
+#enteric fever plots by tmap
+tm_shape(kel) +
+  tm_polygons("DAERAH") + 
+  tm_shape(Enteric_kel) +
+  tm_dots()
+
+```
+```{r}
+#lepto plots by tmap
+tm_shape(kel) +
+  tm_polygons("DAERAH") + 
+  tm_shape(lepto_kel) +
+  tm_dots()
+```
+```{r}
+#all plot by disease
+tm_shape(kel) +
+  tm_polygons("NEGERI") +
+  tm_facets('DAERAH') + 
+  tm_shape(all_kel2) +
+  tm_dots(shape = 'diagnosis', size = 0.1) 
+```
+```{r}
+#enteric fever density per mukim
+ent_in_muk <- st_join(Enteric_kel, kel_map, 
+                      join = st_within)
+glimpse(ent_in_muk)
+```
+```{r}
+#count all enteric fever in mukim
+count_ent_mukim_yr <- ent_in_muk %>% 
+  count(DAERAH, MUKIM, tahun_daftar, AVR) %>% 
+  ungroup()
+count_ent_mukim_yr %>% datatable()
+```
+
+```{r}
+#Calculate incidence of enteric fever per 1000 population for mukim+year
+count_ent_muk_y_1000 <- count_ent_mukim_yr %>% 
+  mutate(incidence_ent = (n/AVR)*1000)
+count_ent_muk_y_1000 %>% datatable()
+```
+```{r}
+# plot incidence enteric fever - join polygon to point
+count_ent_mukim <- ent_in_muk %>% 
+  count(DAERAH, MUKIM, AVR) %>% 
+  ungroup()
+count_ent_mukim_1000 <- count_ent_mukim %>% 
+  mutate(inc_1000 = (n/AVR)*1000)
+kelmap_with_ent <- st_join(kel_map, count_ent_mukim_1000)
+glimpse(kelmap_with_ent)
+```
+```{r}
+#plot incidence map Enteric fever
+ggplot() + 
+  geom_sf(data = kelmap_with_ent, aes(fill = inc_1000)) +
+  scale_fill_gradientn(colors = sf.colors(20)) +
+  ggtitle('Enteric Fever Incidence per 1000 population') +
+  theme_bw()
+```
+```{r}
+#lepto density per mukim
+lep_in_muk <- st_join(lepto_kel, kel_map, 
+                      join = st_within)
+glimpse(lep_in_muk)
+```
+```{r}
+#count all lepto in mukim
+count_lep_mukim_yr <- lep_in_muk %>% 
+  count(DAERAH, MUKIM, tahun_daftar, AVR) %>% 
+  ungroup()
+count_lep_mukim_yr %>% datatable()
+```
+```{r}
+#Calculate incidence of leptospirosis per 1000 population for mukim+year
+count_lep_muk_y_1000 <- count_lep_mukim_yr %>% 
+  mutate(incidence_lep = (n/AVR)*1000)
+count_lep_muk_y_1000 %>% datatable()
+```
+```{r}
+# plot incidence lepto - join polygon to point
+count_lep_mukim <- lep_in_muk %>% 
+  count(DAERAH, MUKIM, AVR) %>% 
+  ungroup()
+count_lep_mukim_1000 <- count_lep_mukim %>% 
+  mutate(inc_1000 = (n/AVR)*1000)
+kelmap_with_lep <- st_join(kel_map, count_lep_mukim_1000)
+glimpse(kelmap_with_lep)
+```
+```{r}
+#plot incidence map Leptospirosis
+ggplot() + 
+  geom_sf(data = kelmap_with_lep, aes(fill = inc_1000)) +
+  scale_fill_gradientn(colors = sf.colors(20)) +
+  ggtitle('Leptospirosis Incidence per 1000 population') +
+  theme_bw()
+```
+
+```{r}
+#point pattern analysis
+install.packages("GISTools")
+library(maptools)
+library(readxl)
+library(tmap)
+library(mapview)
+library(spatstat)
+library(here)
+library(tidyverse)
+library(sf)
+library(spdep)
+library(GISTools)
+```
+```{r}
+#convert data to spatial format
+kel_map.sp <- as(kel_map, "Spatial")
+class(kel_map.sp)
+```
+```{r}
+plot(kel_map.sp)
+```
+```{r}
+#convert point to spatial
+loc_ALL2.sp <- as(loc_ALL2, "Spatial")
+class(loc_ALL2.sp)
+```
+```{r}
+#convert spatial data to ppp format
+kel_map.owin <- as(kel_map.sp, "owin")
+class(kel_map.owin)
+```
+```{r}
+#convert point spatial data to ppp format
+loc_ALL2.ppp <- as(loc_ALL2.sp, 'ppp')
+class(loc_ALL2.ppp)
+```
+```{r}
+#plot ALL
+plot(kel_map.owin)
+points(loc_ALL2.ppp)
+```
+```{r}
+#convert enteric fever and lepto pint data to spatial to ppp
+Enteric_kel.sp <- as(Enteric_kel, "Spatial")
+Enteric_kel.ppp <- as(Enteric_kel.sp, 'ppp')
+lepto_kel.sp <- as(lepto_kel, "Spatial")
+lepto_kel.ppp <- as(lepto_kel.sp, 'ppp')
+
+
+```
+
+```{r}
+#plot Enteric Fever
+plot(kel_map.owin)
+points(Enteric_kel.ppp)
+```
+```{r}
+#remove marks
+Enteric_kel.ppp2 <- Enteric_kel.ppp
+marks(Enteric_kel.ppp2) <- NULL
+```
+
+```{r}
+#generate window
+Window(Enteric_kel.ppp2) <- kel_map.owin
+```
+
+```{r}
+#plot
+plot(Enteric_kel.ppp2, main = NULL, cols=rgb(0,0,0,.2), pch=20)
+```
+
+```{r}
+#density analysis for enteric fever
+quadr_count <- quadratcount(Enteric_kel.ppp2, 
+                            nx = 4,
+                            ny = 6)
+plot(Enteric_kel.ppp2, pch = 20)
+plot(quadr_count, add = TRUE)
+```
+```{r}
+#intensity enteric fever
+inten_ent <-intensity(quadr_count)
+plot(intensity(quadr_count, image = TRUE), main = NULL, las = 1)
+plot(Enteric_kel.ppp2, pch = 20, cex = 0.6, add = TRUE)
+```
+```{r}
+#kernel density raster for enteric fever
+#rescale to km
+Enteric_kel.ppp2.km <- rescale(Enteric_kel.ppp2, 1000, 'km')
+kel_map.owin.km <- rescale(kel_map.owin, 1000, 'km')
+kde.ent <- density(Enteric_kel.ppp2.km)
+plot(kde.ent, main = NULL, las = 1)
+```
+```{r}
+#20km bandwith
+kde.ent.20km <- density(Enteric_kel.ppp2.km, sigma = 20)
+plot(kde.ent.20km, main = NULL, las = 1)
+contour(kde.ent.20km, add = TRUE)
+```
+```{r}
+#plot lepto
+plot(kel_map.owin)
+points(lepto_kel.ppp)
+```
+```{r}
+#remove marks
+lepto_kel.ppp2 <- lepto_kel.ppp
+marks(lepto_kel.ppp2) <- NULL
+#generate window
+Window(lepto_kel.ppp2) <- kel_map.owin
+#plot
+plot(lepto_kel.ppp2, main = NULL, cols=rgb(0,0,0,.2), pch=20)
+```
+```{r}
+#density analysis for lepto fever
+quadr_count2 <- quadratcount(lepto_kel.ppp2, 
+                            nx = 4,
+                            ny = 6)
+plot(lepto_kel.ppp2, pch = 20)
+plot(quadr_count2, add = TRUE)
+```
+
+```{r}
+#intensity lepto
+inten_ent2 <-intensity(quadr_count2)
+plot(intensity(quadr_count2, image = TRUE), main = NULL, las = 1)
+plot(lepto_kel.ppp2, pch = 20, cex = 0.6, add = TRUE)
+```
+```{r}
+#kernel density raster for lepto
+#rescale to km
+lepto_kel.ppp2.km <- rescale(lepto_kel.ppp2, 1000, 'km')
+kel_map.owin.km <- rescale(kel_map.owin, 1000, 'km')
+kde.lep <- density(lepto_kel.ppp2.km)
+plot(kde.lep, main = NULL, las = 1)
+```
+```{r}
+#20km bandwith
+kde.lep.20km <- density(lepto_kel.ppp2.km, sigma = 20)
+plot(kde.lep.20km, main = NULL, las = 1)
+contour(kde.lep.20km, add = TRUE)
+```
